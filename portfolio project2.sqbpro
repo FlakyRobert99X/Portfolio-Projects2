@@ -1,0 +1,212 @@
+<?xml version="1.0" encoding="UTF-8"?><sqlb_project><db path="portfolio.db" readonly="0" foreign_keys="1" case_sensitive_like="0" temp_store="0" wal_autocheckpoint="1000" synchronous="2"/><attached/><window><main_tabs open="structure browser pragmas query" current="3"/></window><tab_structure><column_width id="0" width="300"/><column_width id="1" width="0"/><column_width id="2" width="100"/><column_width id="3" width="8726"/><column_width id="4" width="0"/><expanded_item id="0" parent="1"/><expanded_item id="1" parent="1"/><expanded_item id="2" parent="1"/><expanded_item id="3" parent="1"/></tab_structure><tab_browse><table title="Employee" custom_title="0" dock_id="1" table="4,8:mainEmployee"/><dock_state state="000000ff00000000fd00000001000000020000000000000000fc0100000001fb000000160064006f0063006b00420072006f00770073006500310100000000ffffffff0000011800ffffff000000000000000000000004000000040000000800000008fc00000000"/><default_encoding codec=""/><browse_table_settings><table schema="main" name="Employee" show_row_id="0" encoding="" plot_x_axis="" unlock_view_pk="_rowid_" freeze_columns="0"><sort/><column_widths><column index="1" value="81"/><column index="2" value="78"/><column index="3" value="78"/><column index="4" value="78"/><column index="5" value="83"/><column index="6" value="29"/><column index="7" value="54"/><column index="8" value="86"/><column index="9" value="182"/><column index="10" value="82"/></column_widths><filter_values/><conditional_formats/><row_id_formats/><display_formats/><hidden_columns/><plot_y_axes/><global_filter/></table></browse_table_settings></tab_browse><tab_sql><sql name="SQL 1*">---DATA CLEANING
+
+SELECT *
+FROM NashvilleHousing;
+
+
+SELECT DATE(SaleDate) AS ConvertedDate
+FROM NashvilleHousing;
+
+--MAKING A SELF JOIN
+
+
+SELECT 
+    NH1.ParcelID AS NH1_ParcelID, 
+    NH1.PropertyAddress AS NH1_PropertyAddress, 
+    NH2.ParcelID AS NH2_ParcelID, 
+    NH2.PropertyAddress AS NH2_PropertyAddress
+FROM NashvilleHousing NH1
+JOIN NashvilleHousing NH2
+    ON NH1.ParcelID = NH2.ParcelID
+    AND NH1.UniqueID &lt;&gt; NH2.UniqueID
+WHERE NH1.PropertyAddress IS NULL OR NH2.PropertyAddress IS NULL;
+
+
+UPDATE NashvilleHousing AS NH1
+SET PropertyAddress = (
+    SELECT IFNULL(NH2.PropertyAddress, NH1.PropertyAddress)
+    FROM NashvilleHousing AS NH2
+    WHERE NH1.ParcelID = NH2.ParcelID
+    AND NH1.UniqueID &lt;&gt; NH2.UniqueID
+    AND NH2.PropertyAddress IS NOT NULL
+)
+WHERE NH1.PropertyAddress IS NULL;
+
+--BREAKING ADDRESSES INTO INDIVIDUAL COLUMNS
+
+SELECT 
+    SUBSTR(
+        PropertyAddress, 
+        1, 
+        INSTR(PropertyAddress, ',') - 1
+    ) AS Part1
+FROM NashvilleHousing;
+
+SELECT 
+    SUBSTR(
+        PropertyAddress, 
+        INSTR(PropertyAddress, ',') + 1, 
+        INSTR(SUBSTR(PropertyAddress, INSTR(PropertyAddress, ',') + 1), ',') - 1
+    ) AS Part2
+FROM NashvilleHousing;
+
+SELECT DISTINCT SoldAsVacant, COUNT(SoldAsVacant)
+FROM NashvilleHousing
+GROUP BY SoldAsVacant
+ORDER BY 2;
+
+
+Select SoldAsVacant
+, CASE When SoldAsVacant = 'Y' THEN 'Yes'
+	   When SoldAsVacant = 'N' THEN 'No'
+	   ELSE SoldAsVacant
+	   END
+From NashvilleHousing;
+		
+Update NashvilleHousing
+SET SoldAsVacant = CASE When SoldAsVacant = 'Y' THEN 'Yes'
+	   When SoldAsVacant = 'N' THEN 'No'
+	   ELSE SoldAsVacant
+	   END;
+	
+
+	-- Remove Duplicates
+
+WITH RowNumCTE AS(
+Select *,
+	ROW_NUMBER() OVER (
+	PARTITION BY ParcelID,
+				 PropertyAddress,
+				 SalePrice,
+				 SaleDate,
+				 LegalReference
+				 ORDER BY
+					UniqueID
+					) row_num
+
+From PortfolioProject.dbo.NashvilleHousing;
+
+--order by ParcelID
+)
+Select *
+From RowNumCTE
+Where row_num &gt; 1
+Order by PropertyAddress;
+
+-- Delete Unused Columns
+Select *
+From NashvilleHousing;
+
+
+ALTER TABLE PortfolioProject.dbo.NashvilleHousing
+DROP COLUMN OwnerAddress, TaxDistrict, PropertyAddress, SaleDate
+</sql><sql name="SQL 4">--- ANALYZING EMPLOYEE INFORMATION, SALARY, AND ORGANISATIONAL STRUCTURE.
+
+SELECT *
+FROM employees;
+
+SELECT *
+FROM EmployeeDetails;
+
+---Calculating the total salary and average salary by department (Department Aggregation):
+SELECT DEPARTMENT_ID, SUM(SALARY) AS Totalsalary, AVG(SALARY) AS AverageSalary
+FROM employees
+GROUP BY DEPARTMENT_ID;
+
+--- Manager Hierarchy; Displaying the hierarchy between managers and employees:
+SELECT e1.FIRST_NAME || ' ' || e1.LAST_NAME AS Employee, 
+       e2.FIRST_NAME || ' ' || e2.LAST_NAME AS Manager
+FROM employees e1
+LEFT JOIN employees e2
+ON e1.MANAGER_ID = e2.EMPLOYEE_ID;
+
+--Fetching details for employees along with their education and experience:
+SELECT 
+    e.EMPLOYEE_ID, 
+    e.FIRST_NAME, 
+    e.LAST_NAME, 
+    e.SALARY, 
+    ed.education, 
+    ed.experience_in_current_domain, 
+    ed.Bonus
+FROM Employees e
+JOIN EmployeeDetails ed
+    ON e.DEPARTMENT_ID = ed.DEPARTMENT_ID;
+	
+---Analyzing Salary and Bonus by Department; Calculating the total salary and bonus for each department
+
+SELECT 
+    ed.Department, 
+    SUM(e.SALARY) AS TotalSalary, 
+    AVG(ed.Bonus) AS AvgBonusPercent
+FROM employees e
+JOIN EmployeeDetails ed
+    ON e.DEPARTMENT_ID = ed.DEPARTMENT_ID
+GROUP BY ed.Department;
+
+---Gender and Salary Analysis, Analyzing the average salary of employees by gender:
+SELECT ed.gender, AVG(e.SALARY)  AS AvgSalary
+FROM employees e
+JOIN EmployeeDetails ed
+ON e.DEPARTMENT_ID = ed.DEPARTMENT_ID
+GROUP BY gender;
+
+--Experience vs. Salary, Finding the relationship between experience in the current domain and average salary:
+SELECT 
+    ed.experience_in_current_domain, 
+    AVG(e.SALARY) AS AvgSalary
+FROM employees e
+JOIN EmployeeDetails ed
+    ON e.DEPARTMENT_ID = ed.DEPARTMENT_ID
+GROUP BY ed.experience_in_current_domain
+ORDER BY ed.experience_in_current_domain;
+
+
+--Employee Count by Education Level
+--Counting the number of employees based on their education level:
+
+SELECT 
+    ed.education, 
+    COUNT(e.EMPLOYEE_ID) AS EmployeeCount
+FROM employees e
+JOIN EmployeeDetails ed
+    ON e.DEPARTMENT_ID = ed.DEPARTMENT_ID
+GROUP BY ed.EDUCATION;
+
+--Identify Top-Earning Employees
+--Finding the top 3 highest-paid employees and their additional details:
+
+SELECT 
+    e.EMPLOYEE_ID, 
+    e.FIRST_NAME, 
+    e.LAST_NAME, 
+    e.SALARY, 
+    ed.DEPARTMENT, 
+    ed.EDUCATION
+FROM Employees e
+JOIN EmployeeDetails ed
+    ON e.DEPARTMENT_ID = ed.DEPARTMENT_ID
+ORDER BY e.SALARY DESC
+LIMIT 3;
+
+--CREATING A VIEW TO SIMPLIFY REPEATED QUERIES ACROSS BOTH TABLES:
+
+CREATE VIEW EmployeeFullDetails AS
+SELECT 
+    e.EMPLOYEE_ID, 
+    e.FIRST_NAME, 
+    e.LAST_NAME, 
+    e.SALARY, 
+    e.HIRE_DATE, 
+    ed.education, 
+    ed.joining_year, 
+    ed.age, 
+    ed.gender, 
+    ed.Department, 
+    ed.Bonus
+FROM employees e
+JOIN EmployeeDetails ed
+    ON e.DEPARTMENT_ID = ed.DEPARTMENT_ID
+	
+SELECT * FROM EmployeeFullDetails WHERE SALARY &gt; 70000;
+</sql><current_tab id="1"/></tab_sql></sqlb_project>
